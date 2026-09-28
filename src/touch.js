@@ -287,7 +287,10 @@ class TouchControls {
   // controls を埋める
   fill(game, c, dt) {
     const p = game.player;
+    // 左スティックは傾き量に関係なく常に全速（方向のみ使用）。わずかな傾きは無視する
     const mv = this.toWorld(game, this.left.vx, this.left.vy);
+    const ml = Math.hypot(mv.x, mv.z);
+    if (ml > 0.15) { mv.x /= ml; mv.z /= ml; } else { mv.x = 0; mv.z = 0; }
     c.mx = mv.x; c.mz = mv.z;
     c.skill[0] = c.skill[1] = c.skill[2] = false; c.ult = false;
     c.boost = this.boostTap; this.boostTap = false;
