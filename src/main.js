@@ -101,7 +101,7 @@ async function boot() {
   function startMatch() {
     audio.init();
     const p = settings.player;
-    lastOpts = { playerClass: p.classId, playerName: p.name || 'PLAYER', bots: p.bots, difficulty: p.difficulty, duration: p.duration };
+    lastOpts = { playerClass: p.classId, playerName: p.name || 'PLAYER', bots: p.bots, difficulty: p.difficulty, duration: p.duration, mode: p.mode };
     saveSettings();
     const g = new Game(renderer, map, env, lastOpts);
     setGame(g);

@@ -149,6 +149,7 @@ export class ProjectileSystem {
         // ロボット
         for (const r of game.robots) {
           if (!r.alive || r === p.owner || (p.pierce && p.pierce.has(r))) continue;
+          if (p.owner && p.owner.team && p.owner.team === r.team) continue; // 味方はすり抜ける
           const dx = r.pos.x - p.pos.x, dz = r.pos.z - p.pos.z;
           const rr = r.radius + p.radius;
           if (dx * dx + dz * dz < rr * rr) {

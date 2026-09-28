@@ -6,6 +6,7 @@ import { icon } from './icons.js';
 import { audio } from './audio.js';
 import { input } from './input.js';
 import { touch } from './touch.js';
+import { TEAMS } from './conquest.js';
 import { hexToCss, fmtTime } from './util.js';
 
 // メニュー画面群
@@ -198,6 +199,8 @@ export class UI {
     const bots = $('#opt-bots');
     bots.value = settings.player.bots;
     bots.oninput = () => { settings.player.bots = +bots.value; $('#opt-bots-v').textContent = bots.value; saveSettings(); };
+    $('#opt-mode').innerHTML = [['br', 'バトルロイヤル'], ['team', 'チーム制圧']].map(([v, l]) => `<div class="opt" data-v="${v}">${l}</div>`).join('');
+    $$('#opt-mode .opt').forEach((el) => { el.onclick = () => { settings.player.mode = el.dataset.v; saveSettings(); this.refreshHangar(); }; });
     $('#opt-diff').innerHTML = Object.entries(DIFFICULTY).map(([k, d]) => `<div class="opt" data-v="${k}">${d.label}</div>`).join('');
     $$('#opt-diff .opt').forEach((el) => { el.onclick = () => { settings.player.difficulty = el.dataset.v; saveSettings(); this.refreshHangar(); }; });
     $('#opt-time').innerHTML = DURATIONS.map((d) => `<div class="opt" data-v="${d}">${d / 60}分</div>`).join('');
@@ -210,6 +213,8 @@ export class UI {
     const def = CLASS_BY_ID[settings.player.classId] || CLASSES[0];
     $$('.cls-card').forEach((el) => el.classList.toggle('sel', el.dataset.id === def.id));
     $$('#opt-diff .opt').forEach((el) => el.classList.toggle('sel', el.dataset.v === settings.player.difficulty));
+    $$('#opt-mode .opt').forEach((el) => el.classList.toggle('sel', el.dataset.v === settings.player.mode));
+    $('#opt-bots-l').textContent = settings.player.mode === 'team' ? 'AI機数' : '敵機数';
     $$('#opt-time .opt').forEach((el) => el.classList.toggle('sel', +el.dataset.v === settings.player.duration));
     $('#opt-bots').value = settings.player.bots;
     $('#opt-bots-v').textContent = settings.player.bots;
@@ -372,6 +377,14 @@ export class UI {
           <li>ウルトゲージは時間経過・与ダメージ・撃破で溜まる。</li>
           <li>マップ上の補給ポッド：<span style="color:#50ff80">緑＝修理（HP回復）</span>、<span style="color:#50b8ff">青＝コア（ウルト+30%・EN全快）</span></li>
           <li>建物の陰に入ると手前の建物は自動で透過表示される。</li>
+        </ul>
+        <h3 style="margin-top:14px">チーム制圧モード</h3>
+        <ul>
+          <li><b style="color:#4a9dff">青チーム</b>と<b style="color:#ff5050">赤チーム</b>の対戦（あなたは青）。安全地帯の縮小はなし。</li>
+          <li>拠点 <b>A〜E</b> の円の中に留まるとゲージが進み、満タンで占拠。味方が多いほど速い。敵味方が同時にいると争奪中で停止。敵の拠点はまず中立に戻してから奪う。</li>
+          <li>占拠中の拠点1つにつき毎秒1点。<b>目標点に先に到達</b>するか、時間切れ時に多い方が勝利。</li>
+          <li>撃破はチーム得点に影響しない（相手を拠点から追い出す手段）。味方への攻撃は無効。復活は自陣の出撃地点から。</li>
+          <li>味方が見ている敵は、自分から見えなくても表示される。</li>
           <li><b>TrueSight</b>：自機から見えない場所は暗くなり、そこにいる敵・弾・設置物は表示されない（ミニマップにも出ない）。高さ2m以下の木箱や柵は越して見える。設定で無効化可能。</li>
         </ul>
       </div>`;
@@ -381,10 +394,21 @@ export class UI {
   showResults(res, opts) {
     const me = res.find((r) => r.isPlayer);
     const rank = me ? me.rank : 0;
-    const title = rank === 1 ? 'VICTORY' : rank <= 3 ? `TOP ${rank}` : `RANK #${rank}`;
-    $('#res-title').textContent = title;
-    $('#res-title').className = rank === 1 ? 'win' : rank <= 3 ? 'top' : '';
-    $('#res-sub').textContent = `${res.length}機中 ${rank}位 ／ ${DIFFICULTY[opts.difficulty].label} ／ ${fmtTime(opts.duration)}`;
+    const ti = res.teamInfo;
+    if (ti) {
+      // チーム制圧：チームの勝敗
+      const win = ti.winner === ti.playerTeam, draw = ti.winner === 'draw';
+      $('#res-title').textContent = draw ? 'DRAW' : win ? 'VICTORY' : 'DEFEAT';
+      $('#res-title').className = draw ? 'top' : win ? 'win' : 'lose';
+      $('#res-team').innerHTML = `<div class="res-team"><div class="rt blue"><small>BLUE</small>${ti.blue}</div><div>-</div><div class="rt red"><small>RED</small>${ti.red}</div></div>`;
+      $('#res-sub').textContent = `チーム制圧 ／ 目標 ${ti.target} ／ 個人スコア ${res.length}機中 ${rank}位 ／ ${DIFFICULTY[opts.difficulty].label} ／ ${fmtTime(opts.duration)}`;
+    } else {
+      const title = rank === 1 ? 'VICTORY' : rank <= 3 ? `TOP ${rank}` : `RANK #${rank}`;
+      $('#res-title').textContent = title;
+      $('#res-title').className = rank === 1 ? 'win' : rank <= 3 ? 'top' : '';
+      $('#res-team').innerHTML = '';
+      $('#res-sub').textContent = `${res.length}機中 ${rank}位 ／ ${DIFFICULTY[opts.difficulty].label} ／ ${fmtTime(opts.duration)}`;
+    }
     if (me) {
       $('#res-me').innerHTML = `
         <img src="${this.portraits[me.cls.id]}">
@@ -398,7 +422,7 @@ export class UI {
         </div>`;
     }
     $('#res-body').innerHTML = res.map((r) => `<tr class="${r.isPlayer ? 'me' : ''} ${r.rank === 1 ? 'first' : ''}">
-      <td>${r.rank}</td><td class="sb-name"><img src="${this.portraits[r.cls.id]}">${r.name}</td><td style="color:${hexToCss(r.cls.colors.glow)}">${r.cls.name}</td>
+      <td>${r.rank}</td><td class="sb-name" style="${r.team ? `box-shadow: inset 3px 0 0 ${TEAMS[r.team].css}` : ''}"><img src="${this.portraits[r.cls.id]}">${r.name}</td><td style="color:${hexToCss(r.cls.colors.glow)}">${r.cls.name}</td>
       <td>${r.kills}</td><td>${r.deaths}</td><td>${r.assists}</td><td>${Math.round(r.dmg)}</td><td class="sb-score">${r.score}</td></tr>`).join('');
     this.show('results');
   }

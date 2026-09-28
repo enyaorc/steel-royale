@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { settings, keyName } from './settings.js';
 import { input } from './input.js';
 import { touch } from './touch.js';
+import { TEAMS } from './conquest.js';
 import { icon } from './icons.js';
 import { fmtTime, hexToCss } from './util.js';
 import { MAP_HALF, BOOST, SCORE, RESPAWN_TIME } from './config.js';
@@ -44,6 +45,22 @@ export class HUD {
     $('#pc-class').textContent = `${p.def.name} / ${p.def.role}`;
     $('#pc-name').style.color = '#fff';
     $('#hud-players').textContent = `${game.robots.length} PLAYERS`;
+    // チーム制圧モードの表示切替
+    const team = game.mode === 'team';
+    document.body.classList.toggle('mode-team', team);
+    $('#team-bar').classList.toggle('hidden', !team);
+    $('#hud-title').classList.toggle('hidden', team);
+    $('#cap-status').classList.add('hidden');
+    if (team) {
+      const mine = p.team;
+      $('#tb-left .tb-name').textContent = `${TEAMS[mine].name}${' (YOU)'}`;
+      $('#tb-right .tb-name').textContent = TEAMS[mine === 'blue' ? 'red' : 'blue'].name;
+      $('#tb-left').className = `tb-side ${mine}`;
+      $('#tb-right').className = `tb-side ${mine === 'blue' ? 'red' : 'blue'}`;
+      $('#tb-target').textContent = `目標 ${game.conquest.target}`;
+      this._ptEls = null;
+      $('#tb-points').innerHTML = game.conquest.points.map((pt) => `<div class="tb-pt" data-id="${pt.id}"><i></i><span>${pt.id}</span></div>`).join('');
+    }
     // スキルスロット
     const slots = $('#skills');
     slots.innerHTML = '';
@@ -83,8 +100,8 @@ export class HUD {
     if (type === 'kill') {
       const el = document.createElement('div');
       el.className = 'kf';
-      const kn = d.killer ? `<span class="kf-name ${d.killer.isPlayer ? 'me' : ''}" style="--c:${hexToCss(d.killer.def.colors.glow)}">${d.killer.name}</span>` : '<span class="kf-name zone">ZONE</span>';
-      const vn = `<span class="kf-name ${d.victim.isPlayer ? 'me' : ''}" style="--c:${hexToCss(d.victim.def.colors.glow)}">${d.victim.name}</span>`;
+      const kn = d.killer ? `<span class="kf-name ${d.killer.isPlayer ? 'me' : ''}" style="--c:${this.robotColor(d.killer)}">${d.killer.name}</span>` : '<span class="kf-name zone">ZONE</span>';
+      const vn = `<span class="kf-name ${d.victim.isPlayer ? 'me' : ''}" style="--c:${this.robotColor(d.victim)}">${d.victim.name}</span>`;
       el.innerHTML = `${kn}<span class="kf-icon">&#9760;</span>${vn}`;
       if ((d.killer && d.killer.isPlayer) || d.victim.isPlayer) el.classList.add('hl');
       const kf = $('#killfeed');
@@ -96,6 +113,13 @@ export class HUD {
       this.boardT = 0;
     } else if (type === 'announce') {
       this.announce(d);
+    } else if (type === 'conquest') {
+      const mine = g.player.team;
+      const pt = d.point.id;
+      if (d.team === mine) this.announce({ text: `拠点${pt}を占拠`, sub: d.contributors.includes(g.player) ? '+50' : '', color: TEAMS[mine].css, small: true });
+      else if (d.team) this.announce({ text: `拠点${pt}を奪われた`, color: TEAMS[d.team].css, small: true });
+      else if (d.prev === mine) this.announce({ text: `拠点${pt}が中立化された`, color: '#dddddd', small: true, mini: true });
+      else this.announce({ text: `拠点${pt}を中立化`, sub: d.contributors.includes(g.player) ? '+25' : '', color: '#dddddd', small: true, mini: true });
     } else if (type === 'playerDeath') {
       $('#respawn').classList.remove('hidden');
       $('#rs-killer').innerHTML = d.killer ? `<span style="color:${hexToCss(d.killer.def.colors.glow)}">${d.killer.name}</span> (${d.killer.def.name}) に撃破された` : 'ゾーンにより大破';
@@ -124,6 +148,12 @@ export class HUD {
     setTimeout(() => el.remove(), d.mini ? 1700 : 2600);
   }
 
+  // 機体の表示色（チーム戦ではチーム色、それ以外は機体色）
+  robotColor(r) {
+    if (r.team) return TEAMS[r.team].css;
+    return hexToCss(r.def.colors.glow);
+  }
+
   buildBoard() {
     const g = this.game;
     const list = g.ranking();
@@ -132,7 +162,7 @@ export class HUD {
       const dead = !r.alive;
       return `<div class="br ${r.isPlayer ? 'me' : ''} ${dead ? 'dead' : ''}">
         <span class="br-rank">${i + 1}</span>
-        <span class="br-dot" style="background:${hexToCss(r.def.colors.glow)}"></span>
+        <span class="br-dot" style="background:${this.robotColor(r)}"></span>
         <span class="br-name">${r.name}</span>
         <span class="br-score">${r.stats.score}</span>
         <span class="br-state">${dead ? Math.ceil(r.respawnT) : '&#10003;'}</span>
@@ -145,7 +175,7 @@ export class HUD {
     const g = this.game;
     const list = g.ranking();
     $('#sb-body').innerHTML = list.map((r, i) => `<tr class="${r.isPlayer ? 'me' : ''}">
-      <td>${i + 1}</td><td class="sb-name"><img src="${this.portraits[r.def.id]}">${r.name}</td><td style="color:${hexToCss(r.def.colors.glow)}">${r.def.name}</td>
+      <td>${i + 1}</td><td class="sb-name" style="${r.team ? `box-shadow: inset 3px 0 0 ${TEAMS[r.team].css}` : ''}"><img src="${this.portraits[r.def.id]}">${r.name}</td><td style="color:${hexToCss(r.def.colors.glow)}">${r.def.name}</td>
       <td>${r.stats.kills}</td><td>${r.stats.deaths}</td><td>${r.stats.assists}</td><td>${Math.round(r.stats.dmg)}</td><td class="sb-score">${r.stats.score}</td></tr>`).join('');
   }
 
@@ -160,6 +190,7 @@ export class HUD {
     $('#hud-zone').classList.toggle('shrinking', g.zone.state === 'shrink');
     const alive = g.robots.filter((r) => r.alive).length;
     $('#hud-players').textContent = `${alive} / ${g.robots.length} ALIVE`;
+    if (g.conquest) this.updateTeamBar();
     $('#mm-time').textContent = fmtTime(g.timeLeft);
     $('#mm-time').classList.toggle('low', g.timeLeft < 30);
 
@@ -256,7 +287,8 @@ export class HUD {
         const x = (_v.x * 0.5 + 0.5) * W, y = (-_v.y * 0.5 + 0.5) * H;
         const bw = 56 * dpr, bh = 5 * dpr;
         ctx.font = `600 ${11 * dpr}px Rajdhani, "Segoe UI", sans-serif`;
-        ctx.fillStyle = r.isPlayer ? '#ffe070' : '#ffffff';
+        const ally = r.team && p.team && r.team === p.team;
+        ctx.fillStyle = r.isPlayer ? '#ffe070' : ally ? '#9fcaff' : r.team ? '#ffb0b0' : '#ffffff';
         ctx.strokeStyle = 'rgba(0,0,0,0.8)';
         ctx.lineWidth = 3 * dpr;
         ctx.strokeText(r.name, x, y - 10 * dpr);
@@ -266,12 +298,13 @@ export class HUD {
         const hp = Math.max(0, r.hp / r.maxHp);
         ctx.fillStyle = r.isPlayer ? '#4ade80' : hp > 0.5 ? '#e0e6ee' : hp > 0.25 ? '#ffb040' : '#ff4040';
         if (!r.isPlayer) ctx.fillStyle = hp > 0.5 ? '#ff5a5a' : hp > 0.25 ? '#ff9a40' : '#ff3030';
+        if (ally) ctx.fillStyle = hp > 0.3 ? '#5aa8ff' : '#ff9a40';
         ctx.fillRect(x - bw / 2, y, bw * hp, bh);
         if (r.s.shield > 0) {
           ctx.fillStyle = '#7fd4ff';
           ctx.fillRect(x - bw / 2, y - 2 * dpr, bw * Math.min(1, r.s.shield / r.maxHp), 2 * dpr);
         }
-        ctx.fillStyle = hexToCss(r.def.colors.glow);
+        ctx.fillStyle = this.robotColor(r);
         ctx.fillRect(x - bw / 2 - 5 * dpr, y - dpr, 3 * dpr, bh + 2 * dpr);
       }
     }
@@ -293,7 +326,7 @@ export class HUD {
     }
     ctx.globalAlpha = 1;
     // ゾーン方向インジケータ
-    if (p.alive) {
+    if (p.alive && !g.conquest) {
       const z = g.zone;
       const d = Math.hypot(p.pos.x - z.cx, p.pos.z - z.cz);
       if (d > z.r - 8) {
@@ -366,6 +399,40 @@ export class HUD {
     ctx.restore();
   }
 
+  // チーム得点バー・拠点状況
+  updateTeamBar() {
+    const g = this.game, cq = g.conquest, p = g.player;
+    const mine = p.team, other = mine === 'blue' ? 'red' : 'blue';
+    const sm = Math.floor(cq.scores[mine]), so = Math.floor(cq.scores[other]);
+    $('#tb-left .tb-score').textContent = sm;
+    $('#tb-right .tb-score').textContent = so;
+    $('#tb-left .tb-fill').style.width = `${(sm / cq.target) * 100}%`;
+    $('#tb-right .tb-fill').style.width = `${(so / cq.target) * 100}%`;
+    for (const pt of cq.points) {
+      const el = this._ptEls ? this._ptEls[pt.id] : null;
+      const e = el || document.querySelector(`.tb-pt[data-id="${pt.id}"]`);
+      if (!this._ptEls) this._ptEls = {};
+      this._ptEls[pt.id] = e;
+      e.className = `tb-pt ${pt.owner || 'neutral'}${pt.contested ? ' contested' : ''}`;
+      const side = pt.v > 0 ? 'blue' : pt.v < 0 ? 'red' : 'neutral';
+      const fill = e.firstElementChild;
+      fill.style.height = `${Math.abs(pt.v)}%`;
+      fill.className = side;
+    }
+    // 自機が拠点内にいるときの状況表示
+    const cs = $('#cap-status');
+    const here = p.alive ? cq.pointAt(p.pos.x, p.pos.z) : null;
+    if (here) {
+      const mineSide = mine === 'blue' ? here.v : -here.v;
+      let txt;
+      if (here.contested) txt = `拠点${here.id} 争奪中！`;
+      else if (here.owner === mine && mineSide >= 100) txt = `拠点${here.id} 確保中`;
+      else txt = `拠点${here.id} 占拠中 ${Math.max(0, Math.round(mineSide))}%`;
+      cs.textContent = txt;
+      cs.className = here.contested ? 'contested' : '';
+    } else cs.classList.add('hidden');
+  }
+
   drawMinimap() {
     const g = this.game;
     const c = this.mctx;
@@ -380,6 +447,24 @@ export class HUD {
     c.rotate(g.camAngle);
     c.drawImage(g.map.minimapCanvas, -MAP_HALF * k, -MAP_HALF * k, MAP_HALF * 2 * k, MAP_HALF * 2 * k);
     const z = g.zone;
+    if (g.conquest) {
+      // 拠点
+      for (const pt of g.conquest.points) {
+        const col = pt.owner ? TEAMS[pt.owner].css : '#dddddd';
+        c.fillStyle = col + '44';
+        c.strokeStyle = pt.contested && Math.sin(g.time * 12) > 0 ? '#ffffff' : col;
+        c.lineWidth = 2;
+        c.beginPath(); c.arc(pt.x * k, pt.z * k, pt.r * k + 2, 0, Math.PI * 2); c.fill(); c.stroke();
+        c.save();
+        c.translate(pt.x * k, pt.z * k);
+        c.rotate(-g.camAngle);
+        c.fillStyle = '#fff';
+        c.font = '700 11px Orbitron, Arial, sans-serif';
+        c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText(pt.id, 0, 1);
+        c.restore();
+      }
+    } else {
     // ゾーン外
     c.fillStyle = 'rgba(30,70,160,0.35)';
     c.beginPath();
@@ -388,7 +473,8 @@ export class HUD {
     c.fill();
     c.strokeStyle = '#5ab0ff'; c.lineWidth = 2;
     c.beginPath(); c.arc(z.cx * k, z.cz * k, z.r * k, 0, Math.PI * 2); c.stroke();
-    if (z.next) {
+    }
+    if (z.next && !g.conquest) {
       c.strokeStyle = 'rgba(255,255,255,0.8)'; c.lineWidth = 1; c.setLineDash([4, 3]);
       c.beginPath(); c.arc(z.next.cx * k, z.next.cz * k, z.next.r * k, 0, Math.PI * 2); c.stroke();
       c.setLineDash([]);
@@ -401,7 +487,7 @@ export class HUD {
     const p = g.player;
     for (const r of g.robots) {
       if (!r.alive || r === p || r.isCloakedFrom(p) || r.seen < 0.5) continue;
-      c.fillStyle = hexToCss(r.def.colors.glow);
+      c.fillStyle = this.robotColor(r);
       c.strokeStyle = '#000';
       c.lineWidth = 1;
       c.beginPath(); c.arc(r.pos.x * k, r.pos.z * k, 3.2, 0, Math.PI * 2); c.fill(); c.stroke();

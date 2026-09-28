@@ -19,12 +19,12 @@ function aimPoint(r, maxD, minD = 0) {
   return new THREE.Vector3(r.pos.x + dx * k, 0, r.pos.z + dz * k);
 }
 function enemiesIn(game, r, x, z, rad) {
-  return game.robots.filter((o) => o !== r && o.alive && Math.hypot(o.pos.x - x, o.pos.z - z) < rad + o.radius);
+  return game.robots.filter((o) => game.isEnemy(r, o) && o.alive && Math.hypot(o.pos.x - x, o.pos.z - z) < rad + o.radius);
 }
 function coneTargets(game, r, range, halfAngle) {
   const res = [];
   for (const o of game.robots) {
-    if (o === r || !o.alive) continue;
+    if (!game.isEnemy(r, o) || !o.alive) continue;
     const dx = o.pos.x - r.pos.x, dz = o.pos.z - r.pos.z;
     const d = Math.hypot(dx, dz);
     if (d > range + o.radius) continue;
@@ -39,7 +39,7 @@ function coneTargets(game, r, range, halfAngle) {
 function lineTargets(game, r, ax, az, bx, bz, width) {
   const res = [];
   for (const o of game.robots) {
-    if (o === r || !o.alive) continue;
+    if (!game.isEnemy(r, o) || !o.alive) continue;
     const { d, t } = pointSegDist(ax, az, bx, bz, o.pos.x, o.pos.z);
     if (d < width + o.radius) res.push({ o, t });
   }
@@ -168,7 +168,7 @@ const SKILLS = {
     const ap = aimPoint(r, 45);
     let target = null, best = 14;
     for (const o of game.robots) {
-      if (o === r || !o.alive || o.isCloakedFrom(r)) continue;
+      if (!game.isEnemy(r, o) || !o.alive || o.isCloakedFrom(r)) continue;
       const d = Math.hypot(o.pos.x - ap.x, o.pos.z - ap.z);
       if (d < best) { best = d; target = o; }
     }

@@ -42,6 +42,7 @@ export class Robot {
     this.lastKillTime = -99;
     this.multi = 0;
     this.brain = null;
+    this.team = null;
     this.alive = false;
     this.respawnT = 0;
     this.ultCharge = 0;
@@ -241,6 +242,19 @@ export class Robot {
   }
 
   heal(v) { this.hp = Math.min(this.maxHp, this.hp + v); }
+
+  // チーム戦：足元にチーム色のリングを表示
+  setTeam(team) {
+    this.team = team;
+    const color = team === 'blue' ? 0x3d8bff : 0xff4040;
+    const geo = new THREE.RingGeometry(this.radius * 1.15, this.radius * 1.45, 40);
+    geo.rotateX(-Math.PI / 2);
+    const ring = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, depthWrite: false }));
+    ring.position.y = 0.09;
+    ring.renderOrder = 2;
+    this.model.root.add(ring);
+    this.teamRing = ring;
+  }
 
   breakCloak(ambush) {
     if (this.s.cloakT > 0) this.s.cloakT = 0;

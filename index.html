@@ -23,6 +23,12 @@
   <div id="hud-top">
     <div id="hud-title">SOLO BATTLE ROYALE - <span id="hud-players">10 PLAYERS</span></div>
     <div id="hud-zone">NEXT ZONE SHRINKS IN: <b>2:30</b></div>
+    <div id="team-bar" class="hidden">
+      <div id="tb-left" class="tb-side blue"><span class="tb-name">BLUE</span><span class="tb-score">0</span><div class="tb-track"><div class="tb-fill"></div></div></div>
+      <div id="tb-mid"><div id="tb-points"></div><div id="tb-target">目標 1000</div></div>
+      <div id="tb-right" class="tb-side red"><span class="tb-name">RED</span><span class="tb-score">0</span><div class="tb-track"><div class="tb-fill"></div></div></div>
+    </div>
+    <div id="cap-status" class="hidden"></div>
   </div>
   <div id="board"></div>
   <div id="killfeed"></div>
@@ -101,7 +107,8 @@
   </div>
   <div class="hangar-foot">
     <div class="field"><label>パイロット名</label><input id="pilot-name" maxlength="14" spellcheck="false"></div>
-    <div class="field"><label>敵機数 <b id="opt-bots-v">9</b></label><input type="range" id="opt-bots" min="3" max="15" step="1"></div>
+    <div class="field"><label>ゲームモード</label><div class="opts" id="opt-mode"></div></div>
+    <div class="field"><label><span id="opt-bots-l">敵機数</span> <b id="opt-bots-v">9</b></label><input type="range" id="opt-bots" min="3" max="15" step="1"></div>
     <div class="field"><label>AI難易度</label><div class="opts" id="opt-diff"></div></div>
     <div class="field"><label>試合時間</label><div class="opts" id="opt-time"></div></div>
     <div class="foot-btns">
@@ -172,7 +179,7 @@
 <!-- ========== RESULTS ========== -->
 <div id="screen-results" class="screen dim">
   <div class="panel wide">
-    <div class="res-head"><div id="res-title">VICTORY</div><div id="res-sub"></div></div>
+    <div class="res-head"><div id="res-title">VICTORY</div><div id="res-team"></div><div id="res-sub"></div></div>
     <div id="res-me"></div>
     <table class="res-table">
       <thead><tr><th>#</th><th>PILOT</th><th>MECH</th><th>K</th><th>D</th><th>A</th><th>DMG</th><th>SCORE</th></tr></thead>

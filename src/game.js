@@ -6,6 +6,7 @@ import { Effects } from './effects.js';
 import { ProjectileSystem } from './projectiles.js';
 import { cutUniforms } from './map.js';
 import { TrueSight, visUniforms } from './truesight.js';
+import { Conquest, TEAMS, TEAM_BASE, otherTeam } from './conquest.js';
 import { zoneTexture } from './textures.js';
 import { audio } from './audio.js';
 import { settings } from './settings.js';
@@ -27,6 +28,8 @@ export class Game {
     this.map = map;
     this.opts = opts;
     this.attract = !!opts.attract;
+    // モード：br = バトルロイヤル / team = チーム制圧
+    this.mode = this.attract ? 'br' : (opts.mode || 'br');
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x1d2127);
     this.scene.fog = new THREE.Fog(0x1d2127, 95, 230);
@@ -77,6 +80,7 @@ export class Game {
 
     this.buildZone();
     this.buildPickups();
+    this.conquest = this.mode === 'team' ? new Conquest(this) : null;
     this.spawnRobots();
     if (this.attract) { this.state = 'playing'; this.followIdx = 0; this.followT = 0; }
   }
@@ -98,7 +102,8 @@ export class Game {
   spawnRobots() {
     const o = this.opts;
     const names = [...BOT_NAMES].sort(() => Math.random() - 0.5);
-    const total = (o.attract ? 10 : o.bots + 1);
+    let total = (o.attract ? 10 : o.bots + 1);
+    if (this.mode === 'team' && total % 2) total++; // チーム戦は偶数にして均等に分ける
     const classPool = [];
     for (let i = 0; i < total; i++) classPool.push(CLASSES[i % CLASSES.length]);
     classPool.sort(() => Math.random() - 0.5);
@@ -116,6 +121,13 @@ export class Game {
       const r = new Robot(this, def, name, false);
       r.brain = new BotBrain(r, this, o.attract ? 'normal' : o.difficulty);
       this.robots.push(r);
+    }
+    if (this.mode === 'team') {
+      // 前半を青（プレイヤー含む）、後半を赤に割り当て
+      const half = total / 2;
+      this.robots.forEach((r, i) => r.setTeam(i < half ? 'blue' : 'red'));
+      for (const r of this.robots) this.respawn(r, null, true);
+      return;
     }
     // 初期配置：円周上に散らす
     const n = this.robots.length;
@@ -195,6 +207,12 @@ export class Game {
   // ---------- ヘルパー ----------
   after(t, fn) { this.timers.push({ t, fn }); }
 
+  // 敵同士か（チーム戦では同じチームは味方）
+  isEnemy(a, b) {
+    if (!a || !b || a === b) return false;
+    return !(a.team && a.team === b.team);
+  }
+
   sfx(name, src, opt = {}) {
     if (this.attract && !opt.force) { opt = { ...opt, vol: (opt.vol ?? 1) * 0.35 }; }
     const p = src && src.pos ? src.pos : src;
@@ -218,6 +236,7 @@ export class Game {
     if (!target.alive || this.state === 'ended') return 0;
     if (target.s.invulnT > 0 && !opt.zone) return 0;
     if (src === target) return 0;
+    if (src && src.team && src.team === target.team) return 0; // 味方への攻撃は無効
     let a = amount;
     if (src && src.alive !== undefined) {
       if (src.s.berserkT > 0) a *= 1.6;
@@ -283,7 +302,7 @@ export class Game {
       this.damage(r, dmg * f, src, { ...opt, dir: { x: dx || 0.01, z: dz }, knock: opt.knock ?? radius * 1.2 });
     }
     for (const d of [...this.deployables]) {
-      if (d.type !== 'turret' || d.owner === src) continue;
+      if (d.type !== 'turret' || d.owner === src || (src && !this.isEnemy(src, d.owner))) continue;
       if (Math.hypot(d.x - pos.x, d.z - pos.z) < radius + 1) this.damageDeployable(d, dmg);
     }
   }
@@ -345,6 +364,18 @@ export class Game {
   // ---------- リスポーン ----------
   respawn(r, point = null, initial = false) {
     let p = point;
+    if (!p && this.mode === 'team') {
+      // 自陣の出撃地点付近。敵から最も遠い候補を選ぶ
+      const b = TEAM_BASE[r.team];
+      let best = null, bestD = -1;
+      for (let i = 0; i < 8; i++) {
+        const c = this.map.randomFreePoint(b.x, b.z, 13);
+        let md = 999;
+        for (const o of this.robots) if (o.alive && this.isEnemy(r, o)) md = Math.min(md, Math.hypot(o.pos.x - c.x, o.pos.z - c.z));
+        if (md > bestD) { bestD = md; best = c; }
+      }
+      p = best;
+    }
     if (!p) {
       const z = this.zone;
       let best = null, bestD = -1;
@@ -361,6 +392,7 @@ export class Game {
     r.alive = true;
     r.s.invulnT = initial ? 0 : SPAWN_PROTECT;
     r.aimYaw = Math.atan2(-p.x, -p.z);
+    r.seen = r.isPlayer || (this.player && r.team && r.team === this.player.team) ? 1 : 0;
     r.model.legsYaw = r.aimYaw;
     r.setVisible(true);
     if (r.brain) r.brain.reset();
@@ -459,7 +491,7 @@ export class Game {
 
   hitDeployables(p) {
     for (const d of this.deployables) {
-      if (d.type !== 'turret' || d.owner === p.owner) continue;
+      if (d.type !== 'turret' || d.owner === p.owner || !this.isEnemy(p.owner, d.owner)) continue;
       if (Math.hypot(d.x - p.pos.x, d.z - p.pos.z) < 1.0 + p.radius) {
         p.dead = true;
         if (p.aoe > 0) this.explode(p.pos, p.aoe, p.aoeDmg, p.owner, { ...p.opts, color: p.color });
@@ -473,7 +505,7 @@ export class Game {
   nearestEnemy(owner, x, z, range) {
     let best = null, bd = range;
     for (const r of this.robots) {
-      if (r === owner || !r.alive || r.isCloakedFrom(owner) || r.s.invulnT > 0) continue;
+      if (!this.isEnemy(owner, r) || !r.alive || r.isCloakedFrom(owner) || r.s.invulnT > 0) continue;
       const d = Math.hypot(r.pos.x - x, r.pos.z - z);
       if (d < bd && this.map.lineOfSight(x, z, r.pos.x, r.pos.z, 1.6)) { bd = d; best = r; }
     }
@@ -494,7 +526,7 @@ export class Game {
           d.light.visible = d.armT > 0 ? true : Math.sin(this.time * 10) > 0;
           if (d.armT > 0) break;
           for (const r of this.robots) {
-            if (r === d.owner || !r.alive) continue;
+            if (!this.isEnemy(d.owner, r) || !r.alive) continue;
             if (Math.hypot(r.pos.x - d.x, r.pos.z - d.z) < 3.5 + r.radius * 0.5) {
               this.removeDeployable(d);
               this.explode({ x: d.x, y: 0.5, z: d.z }, 4.2, 220, d.owner, { color: d.owner.def.colors.glow, knock: 12 });
@@ -550,7 +582,7 @@ export class Game {
           if (d.tickT <= 0) {
             d.tickT = 0.25;
             for (const r of this.robots) {
-              if (r === d.owner || !r.alive) continue;
+              if (!this.isEnemy(d.owner, r) || !r.alive) continue;
               if (Math.hypot(r.pos.x - d.x, r.pos.z - d.z) < d.r + r.radius * 0.5) this.damage(r, 17, d.owner, { burn: 20, burnT: 1.5, noNumber: true });
             }
           }
@@ -563,6 +595,12 @@ export class Game {
   // ---------- 更新 ----------
   updateZone(dt) {
     const z = this.zone;
+    if (this.mode === 'team') {
+      this.zoneMesh.visible = false;
+      this.nextRing.visible = false;
+      z.r = 9999; z.next = null;
+      return;
+    }
     if (z.phase >= ZONE_RADII.length - 1) return;
     z.t -= dt;
     if (z.state === 'wait') {
@@ -610,6 +648,7 @@ export class Game {
 
   zoneTimerText() {
     const z = this.zone;
+    if (this.mode === 'team') return { label: 'TEAM CONQUEST', t: null };
     if (!z.next) return { label: 'FINAL ZONE', t: null };
     return z.state === 'wait' ? { label: 'NEXT ZONE SHRINKS IN', t: z.t } : { label: 'ZONE SHRINKING', t: z.t };
   }
@@ -730,6 +769,7 @@ export class Game {
       }
     }
 
+    if (this.conquest) this.conquest.update(dt, this.state === 'playing');
     this.updateDeployables(dt);
     this.proj.update(dt);
     this.fx.update(dt);
@@ -755,6 +795,20 @@ export class Game {
     return !this.tsOn || this.ts.isVisible(x, z, rad);
   }
 
+  // チーム戦：味方機が視認している敵は自分にも見える
+  spottedByAlly(target) {
+    const p = this.player;
+    if (!this.tsOn || !p || !p.team || !target.team || target.team === p.team) return false;
+    if (target.s.cloakT > 0) return false;
+    for (const a of this.robots) {
+      if (a === p || !a.alive || a.team !== p.team) continue;
+      const d = Math.hypot(a.pos.x - target.pos.x, a.pos.z - target.pos.z);
+      if (d > 45) continue;
+      if (this.map.lineOfSight(a.pos.x, a.pos.z, target.pos.x, target.pos.z, 1.8)) return true;
+    }
+    return false;
+  }
+
   updateTrueSight(dt) {
     const p = this.player;
     this.tsOn = !!(this.ts && settings.gameplay.trueSight);
@@ -769,7 +823,7 @@ export class Game {
     const k = Math.min(1, dt * 10);
     for (const r of this.robots) {
       if (!r.alive) continue;
-      const want = r === p || this.canSee(r.pos.x, r.pos.z, r.radius) ? 1 : 0;
+      const want = r === p || (p && r.team && r.team === p.team) || this.canSee(r.pos.x, r.pos.z, r.radius) || this.spottedByAlly(r) ? 1 : 0;
       r.seen += (want - r.seen) * k;
       if (want === 1 && r.seen > 0.98) r.seen = 1;
       r.updateVisibility(p || null, r.seen);
@@ -835,25 +889,52 @@ export class Game {
     this.player.brain = new BotBrain(this.player, this, 'hard');
   }
 
+  // チーム戦の勝敗（'blue' / 'red' / 'draw'）
+  teamWinner() {
+    if (!this.conquest) return null;
+    const s = this.conquest.scores;
+    const b = Math.floor(s.blue), r = Math.floor(s.red);
+    return b > r ? 'blue' : r > b ? 'red' : 'draw';
+  }
+
   endMatch() {
     if (this.state === 'ended') return;
     this.state = 'ended';
     this.endT = 0;
-    this.emit('announce', { text: 'MATCH OVER', sub: '', color: '#ffd24a' });
+    if (this.conquest) {
+      const w = this.teamWinner();
+      const text = w === 'draw' ? 'DRAW' : `${TEAMS[w].name} TEAM WINS`;
+      this.emit('announce', { text, sub: '', color: w === 'draw' ? '#ffd24a' : TEAMS[w].css });
+    } else this.emit('announce', { text: 'MATCH OVER', sub: '', color: '#ffd24a' });
     this.sfx('zone', null);
   }
 
   results() {
     const list = [...this.robots].sort((a, b) => b.stats.score - a.stats.score || b.stats.kills - a.stats.kills || a.stats.deaths - b.stats.deaths);
-    return list.map((r, i) => ({ rank: i + 1, name: r.name, cls: r.def, isPlayer: r.isPlayer, ...r.stats }));
+    const rows = list.map((r, i) => ({ rank: i + 1, name: r.name, cls: r.def, isPlayer: r.isPlayer, team: r.team, ...r.stats }));
+    if (this.conquest) {
+      rows.teamInfo = {
+        winner: this.teamWinner(),
+        blue: Math.floor(this.conquest.scores.blue), red: Math.floor(this.conquest.scores.red),
+        target: this.conquest.target, playerTeam: this.player && this.player.team,
+      };
+    }
+    return rows;
   }
 
   ranking() {
-    return [...this.robots].sort((a, b) => b.stats.score - a.stats.score || b.stats.kills - a.stats.kills);
+    const byScore = (a, b) => b.stats.score - a.stats.score || b.stats.kills - a.stats.kills;
+    if (this.mode === 'team') {
+      // 自チームを上、敵チームを下にまとめる
+      const mine = this.player ? this.player.team : 'blue';
+      return [...this.robots].sort((a, b) => (a.team === b.team ? byScore(a, b) : a.team === mine ? -1 : 1));
+    }
+    return [...this.robots].sort(byScore);
   }
 
   dispose() {
     if (this.ts) this.ts.dispose();
+    if (this.conquest) this.conquest.dispose();
     visUniforms.uVisOn.value = 0;
     this.proj.clear();
     this.fx.clear();

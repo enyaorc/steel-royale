@@ -11,7 +11,7 @@ export const DEFAULT_SETTINGS = {
     boost: 'Space', scoreboard: 'Tab',
   },
   touch: { mode: 'auto', scale: 1.0, opacity: 0.85 },
-  player: { name: 'STEEL_WOLF', classId: 'vanguard', bots: 9, difficulty: 'normal', duration: 300 },
+  player: { name: 'STEEL_WOLF', classId: 'vanguard', bots: 9, difficulty: 'normal', duration: 300, mode: 'br' },
 };
 
 export const KEY_LABELS = {

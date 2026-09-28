@@ -45,7 +45,7 @@ export class BotBrain {
 
   canSee(o) {
     const r = this.r;
-    if (!o.alive || o.isCloakedFrom(r)) return false;
+    if (!o.alive || !this.game.isEnemy(r, o) || o.isCloakedFrom(r)) return false;
     const d = Math.hypot(o.pos.x - r.pos.x, o.pos.z - r.pos.z);
     if (d > 48) return false;
     if (d < 12) return true;
@@ -64,6 +64,8 @@ export class BotBrain {
       if (o === this.target) s -= 8;
       if (o.s.invulnT > 0) s += 25;
       if (o.isPlayer) s -= 3;
+      // チーム戦では遠くの敵を追いかけず拠点を優先（攻撃してきた相手は除く）
+      if (g.mode === 'team' && d > 30 && !(o === this.lastAttacker && g.time - this.lastHurtT < 3)) continue;
       if (s < bestScore) { bestScore = s; best = o; }
     }
     if (best !== this.target) {
@@ -101,6 +103,10 @@ export class BotBrain {
     if (this.mode === 'wander') {
       if (this.target) {
         this.mode = 'fight';
+      } else if (g.conquest) {
+        const pk = hp < 0.6 && this.nearestPickup('repair', 30);
+        if (pk) { this.mode = 'pickup'; this.goal = { x: pk.x, z: pk.z }; }
+        else { this.mode = 'objective'; this.goal = this.objectiveGoal(); }
       } else if (g.time - this.lastSeen.t < 3) {
         this.mode = 'hunt';
         this.goal = { x: this.lastSeen.x, z: this.lastSeen.z };
@@ -116,6 +122,37 @@ export class BotBrain {
       }
     }
     this.goalMode = this.mode;
+  }
+
+  // チーム制圧：向かう拠点を選び、その中の移動先を返す
+  objectiveGoal() {
+    const g = this.game, r = this.r, cq = g.conquest;
+    this.objT = (this.objT || 0) - 1;
+    const cur = this.objPoint;
+    const done = cur && cur.owner === r.team && Math.abs(cur.v) >= 100 && !cur.contested;
+    if (!cur || done || this.objT <= 0) {
+      if (this.objBias === undefined) this.objBias = Math.random() * 30;
+      let best = null, bs = Infinity;
+      for (const p of cq.points) {
+        const d = Math.hypot(p.x - r.pos.x, p.z - r.pos.z);
+        const enemies = r.team === 'blue' ? p.nr : p.nb;
+        let sc = d + Math.random() * 25 + this.objBias * (p.id.charCodeAt(0) % 3 === 0 ? 1 : -0.3);
+        const mine = p.owner === r.team && Math.abs(p.v) >= 100;
+        if (mine && !enemies) sc += 90;           // 確保済みで安全な拠点は後回し
+        if (p.owner === r.team && enemies) sc -= 45; // 攻められている自拠点は守る
+        if (p.contested) sc -= 15;
+        if (sc < bs) { bs = sc; best = p; }
+      }
+      this.objPoint = best;
+      this.objT = 8 + Math.floor(Math.random() * 6);
+      this.objSpot = null;
+    }
+    const p = this.objPoint;
+    // 拠点内ではランダムな位置へ移動し続ける
+    if (!this.objSpot || Math.hypot(this.objSpot.x - r.pos.x, this.objSpot.z - r.pos.z) < 2 || Math.random() < 0.08) {
+      this.objSpot = g.map.randomFreePoint(p.x, p.z, p.r * 0.7);
+    }
+    return this.objSpot;
   }
 
   nearestPickup(type, maxD) {
@@ -252,7 +289,7 @@ export class BotBrain {
     this.skillT -= dt;
     if (this.skillT <= 0 && !r.channel) {
       this.skillT = rand(0.3, 0.6);
-      const ctx = { t, d: dist, los, hp, hurt: g.time - this.lastHurtT < 1.2, near: (rad) => g.robots.filter((o) => o !== r && o.alive && !o.isCloakedFrom(r) && Math.hypot(o.pos.x - r.pos.x, o.pos.z - r.pos.z) < rad).length };
+      const ctx = { t, d: dist, los, hp, hurt: g.time - this.lastHurtT < 1.2, near: (rad) => g.robots.filter((o) => g.isEnemy(r, o) && o.alive && !o.isCloakedFrom(r) && Math.hypot(o.pos.x - r.pos.x, o.pos.z - r.pos.z) < rad).length };
       const tryUse = (id) => {
         const fn = RULES[id];
         if (!fn) return false;

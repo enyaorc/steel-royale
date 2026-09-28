@@ -271,7 +271,7 @@ class TouchControls {
     const p = game.player;
     let best = null, bd = range;
     for (const r of game.robots) {
-      if (r === p || !r.alive || r.isCloakedFrom(p) || r.seen < 0.5) continue;
+      if (!game.isEnemy(p, r) || !r.alive || r.isCloakedFrom(p) || r.seen < 0.5) continue;
       const d = Math.hypot(r.pos.x - p.pos.x, r.pos.z - p.pos.z);
       if (d < bd) { bd = d; best = r; }
     }
