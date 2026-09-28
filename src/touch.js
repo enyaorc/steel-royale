@@ -168,7 +168,9 @@ class TouchControls {
       this.left.id = e.pointerId;
       this.left.ox = e.clientX; this.left.oy = e.clientY;
       this.left.vx = this.left.vy = 0;
-      base.style.left = `${e.clientX}px`; base.style.top = `${e.clientY}px`;
+      // 表示位置は操作エリア(#tz-left)基準に変換する（画面座標のままだとエリアの上端分ずれる）
+      const zr = tz.getBoundingClientRect();
+      base.style.left = `${e.clientX - zr.left}px`; base.style.top = `${e.clientY - zr.top}px`;
       base.classList.add('on');
       this.setKnob('#ls-knob', 0, 0);
     }, opts);
