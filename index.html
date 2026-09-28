@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>STEEL ROYALE - Mech Battle Royale</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="gl-wrap"></div>
+<canvas id="overlay"></canvas>
+
+<!-- ========== HUD ========== -->
+<div id="hud" class="hidden">
+  <div id="zone-vig"></div>
+  <div id="vignette"></div>
+  <div id="hud-top">
+    <div id="hud-title">SOLO BATTLE ROYALE - <span id="hud-players">10 PLAYERS</span></div>
+    <div id="hud-zone">NEXT ZONE SHRINKS IN: <b>2:30</b></div>
+  </div>
+  <div id="board"></div>
+  <div id="killfeed"></div>
+  <div id="announce"></div>
+  <div id="countdown" class="hidden">3</div>
+  <div id="zone-warn" class="hidden">安全地帯の外にいます！ 青い壁の内側へ戻れ</div>
+
+  <div id="player-card">
+    <div id="pc-top">
+      <img id="pc-portrait" alt="">
+      <div id="pc-info">
+        <div id="pc-name">STEEL_WOLF</div>
+        <div id="pc-class">VANGUARD</div>
+        <div class="bar hp"><div id="hp-fill"></div><div id="hp-shield"></div><span class="bar-l">HP</span><span id="hp-text">1000</span></div>
+        <div class="bar en"><div id="en-fill"></div><span class="bar-l">EN</span><span id="en-text">100</span></div>
+        <div id="pc-status"></div>
+      </div>
+      <div id="pc-score-box"><div class="lbl">SCORE</div><div id="pc-score">0</div><div class="lbl">K / D / A</div><div id="pc-kda">0 / 0 / 0</div></div>
+    </div>
+    <div id="skills"></div>
+  </div>
+
+  <div id="minimap-box">
+    <div id="mm-time">5:00</div>
+    <canvas id="minimap" width="220" height="220"></canvas>
+  </div>
+
+  <div id="respawn" class="hidden">
+    <div class="rs-title">DESTROYED</div>
+    <div id="rs-killer"></div>
+    <div id="rs-penalty">-50 SCORE</div>
+    <div class="rs-count">再出撃まで <b id="rs-time">5.0</b> 秒</div>
+  </div>
+
+  <div id="touch-ui"></div>
+
+  <div id="scoreboard" class="hidden">
+    <div class="sb-title">SCOREBOARD</div>
+    <table>
+      <thead><tr><th>#</th><th>PILOT</th><th>MECH</th><th>K</th><th>D</th><th>A</th><th>DMG</th><th>SCORE</th></tr></thead>
+      <tbody id="sb-body"></tbody>
+    </table>
+  </div>
+</div>
+<div id="crosshair"><i class="c1"></i><i class="c2"></i><i class="c3"></i><i class="c4"></i><b></b></div>
+
+<!-- ========== TITLE ========== -->
+<div id="screen-title" class="screen">
+  <div class="title-wrap">
+    <div id="title-logo"></div>
+    <div class="title-sub">MECH BATTLE ROYALE</div>
+    <div class="menu">
+      <button id="btn-play" class="big">出撃 <small>DEPLOY</small></button>
+      <button id="btn-settings">設定 <small>SETTINGS</small></button>
+      <button id="btn-howto">操作説明 <small>HOW TO PLAY</small></button>
+      <button id="btn-credits">クレジット <small>CREDITS</small></button>
+      <button id="btn-fullscreen" class="touch-only">フルスクリーン <small>FULLSCREEN</small></button>
+    </div>
+  </div>
+  <div class="title-foot pc-only">WASD 移動 ／ マウス 照準 ／ 左クリック 攻撃 ／ 1・2・3 スキル ／ 4 ウルト ／ SPACE ブースト</div>
+  <div class="title-foot touch-only">左スティック 移動 ／ 右スティック 攻撃 ／ スキルは押して方向へフリック（タップで自動照準）</div>
+</div>
+
+<!-- ========== HANGAR ========== -->
+<div id="screen-hangar" class="screen">
+  <div class="scr-head"><span class="scr-title">HANGAR</span><span class="scr-sub">機体選択・出撃設定</span></div>
+  <div class="hangar">
+    <div id="cls-list"></div>
+    <div class="hangar-center">
+      <canvas id="hangar-canvas"></canvas>
+      <div class="drag-hint">ドラッグで回転</div>
+    </div>
+    <div id="cls-detail"></div>
+  </div>
+  <div class="hangar-foot">
+    <div class="field"><label>パイロット名</label><input id="pilot-name" maxlength="14" spellcheck="false"></div>
+    <div class="field"><label>敵機数 <b id="opt-bots-v">9</b></label><input type="range" id="opt-bots" min="3" max="15" step="1"></div>
+    <div class="field"><label>AI難易度</label><div class="opts" id="opt-diff"></div></div>
+    <div class="field"><label>試合時間</label><div class="opts" id="opt-time"></div></div>
+    <div class="foot-btns">
+      <button id="btn-hangar-back" class="back">戻る</button>
+      <button id="btn-launch" class="big">出撃開始 <small>LAUNCH</small></button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== SETTINGS ========== -->
+<div id="screen-settings" class="screen">
+  <div class="panel settings">
+    <div class="scr-head"><span class="scr-title">SETTINGS</span><span class="scr-sub">設定</span></div>
+    <div class="set-tabs">
+      <div class="set-tab sel" data-tab="graphics">グラフィック</div>
+      <div class="set-tab" data-tab="audio">サウンド</div>
+      <div class="set-tab" data-tab="gameplay">ゲームプレイ</div>
+      <div class="set-tab" data-tab="controls">操作</div>
+    </div>
+    <div class="set-page active" id="set-graphics"></div>
+    <div class="set-page" id="set-audio"></div>
+    <div class="set-page" id="set-gameplay"></div>
+    <div class="set-page" id="set-controls"></div>
+    <div class="foot-btns">
+      <button id="btn-set-reset">初期設定に戻す</button>
+      <button id="btn-set-back" class="back">戻る</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== HOW TO ========== -->
+<div id="screen-howto" class="screen">
+  <div class="panel wide">
+    <div class="scr-head"><span class="scr-title">HOW TO PLAY</span><span class="scr-sub">操作説明</span></div>
+    <div id="howto-body"></div>
+    <div class="foot-btns"><button class="back btn-back-title">戻る</button></div>
+  </div>
+</div>
+
+<!-- ========== CREDITS ========== -->
+<div id="screen-credits" class="screen">
+  <div class="panel">
+    <div class="scr-head"><span class="scr-title">CREDITS</span></div>
+    <div class="credits">
+      <p><b>STEEL ROYALE</b> - Quarter-view Mech Battle Royale</p>
+      <p>Engine: three.js</p>
+      <p>3Dモデル・テクスチャ・アイコン・効果音・BGM：すべてプログラムによる手続き生成</p>
+      <p>Inspired by classic isometric arena action games.</p>
+    </div>
+    <div class="foot-btns"><button class="back btn-back-title">戻る</button></div>
+  </div>
+</div>
+
+<!-- ========== PAUSE ========== -->
+<div id="screen-pause" class="screen dim">
+  <div class="panel small">
+    <div class="scr-head"><span class="scr-title">PAUSED</span></div>
+    <div class="menu">
+      <button id="btn-resume" class="big">再開</button>
+      <button id="btn-pause-settings">設定</button>
+      <button id="btn-pause-restart">リスタート</button>
+      <button id="btn-pause-fs" class="touch-only">フルスクリーン切替</button>
+      <button id="btn-pause-quit" class="back">タイトルへ戻る</button>
+    </div>
+  </div>
+</div>
+
+<!-- ========== RESULTS ========== -->
+<div id="screen-results" class="screen dim">
+  <div class="panel wide">
+    <div class="res-head"><div id="res-title">VICTORY</div><div id="res-sub"></div></div>
+    <div id="res-me"></div>
+    <table class="res-table">
+      <thead><tr><th>#</th><th>PILOT</th><th>MECH</th><th>K</th><th>D</th><th>A</th><th>DMG</th><th>SCORE</th></tr></thead>
+      <tbody id="res-body"></tbody>
+    </table>
+    <div class="foot-btns">
+      <button id="btn-res-title" class="back">タイトルへ</button>
+      <button id="btn-res-hangar">機体変更</button>
+      <button id="btn-res-again" class="big">もう一度</button>
+    </div>
+  </div>
+</div>
+
+<div id="rotate-hint"><div class="rh-icon">&#8635;</div><div>端末を横向きにしてください</div></div>
+
+<!-- ========== LOADING ========== -->
+<div id="loading">
+  <div class="ld-logo">STEEL ROYALE</div>
+  <div id="load-bar"><i></i></div>
+  <div id="load-text">起動中...</div>
+</div>
+
+<script src="dist/game.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+# 依存パッケージ（npm install で復元）
+node_modules/
+
+# ソースマップ（動作に不要）
+dist/*.map
+
+# ローカル開発用設定
+.claude/
+
+# OS・エディタ
+Thumbs.db
+.DS_Store
+.vscode/

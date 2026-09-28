@@ -1,0 +1,14 @@
+{
+  "name": "mech-royale",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Quarter-view robot battle royale (three.js)",
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --format=iife --minify --outfile=dist/game.js",
+    "watch": "esbuild src/main.js --bundle --format=iife --sourcemap --outfile=dist/game.js --watch"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "three": "^0.186.1"
+  }
+}
